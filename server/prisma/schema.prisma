@@ -5,8 +5,7 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -19,6 +18,7 @@ model User {
   githubId  String   @unique
   username  String
   avatar    String?
+  accessToken  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

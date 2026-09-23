@@ -1,5 +1,7 @@
 import express from "express";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
+
 
 import {
     getGithubAuthorizationUrl,
@@ -7,18 +9,60 @@ import {
     getGithubUser
 } from "../services/auth/githubAuth.js";
 import prisma from "../db/prisma.js";
+import { requireAuth } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/github/callback", async (req, res) => {
+router.get("/me", requireAuth, async (req, res) => {
     try {
-        const { code } = req.query;
+        const user = await prisma.user.findUnique({
+            where: {
+                id: req.userId
+            },
+            select: {
+                id: true,
+                githubId: true,
+                username: true,
+                avatar: true,
+                createdAt: true
+            }
+        });
 
-        if (!code) {
-            return res.status(400).json({
-                message: "Authorization code is missing"
+        if (!user) {
+            return res.status(404).json({
+                message: "User not found"
             });
         }
+
+        res.json({
+            user
+        });
+    } catch (error) {
+        console.error("Get current user error:", error);
+
+        res.status(500).json({
+            message: "Failed to get current user"
+        });
+    }
+});
+
+router.get("/github/callback", async (req, res) => {
+    try {
+        const { code, state } = req.query;
+
+        if (!code || !state) {
+            return res.status(400).json({
+                message: "Missing authorization code or state"
+            });
+        }
+
+        if (state !== req.cookies.oauth_state) {
+            return res.status(400).json({
+                message: "Invalid OAuth state"
+            });
+        }
+
+        res.clearCookie("oauth_state");
 
         const accessToken = await exchangeCodeForToken(code);
 
@@ -41,17 +85,27 @@ router.get("/github/callback", async (req, res) => {
             }
         });
 
-        console.log("User saved:", user.username);
-
-        res.json({
-            message: "GitHub OAuth successful",
-            user: {
-                id: user.id,
-                githubId: user.githubId,
-                username: user.username,
-                avatar: user.avatar
+        const token = jwt.sign(
+            {
+                userId: user.id
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: "7d"
             }
+        );
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: false,
+            sameSite: "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000
         });
+
+        console.log("User logged in:", user.username);
+
+        res.redirect(`${process.env.FRONTEND_URL}/dashboard`);
+
     } catch (error) {
         console.error(
             "GitHub OAuth error:",
@@ -65,11 +119,26 @@ router.get("/github/callback", async (req, res) => {
 });
 
 router.get("/github", (req, res) => {
-    const state = crypto.randomBytes(32).toString("hex")
+    const state = crypto.randomBytes(32).toString("hex");
 
-    const githubUrl = getGithubAuthorizationUrl(state)
+    res.cookie("oauth_state", state, {
+        httpOnly: true,
+        secure: false,
+        sameSite: "lax",
+        maxAge: 10 * 60 * 1000
+    });
 
-    res.redirect(githubUrl)
-})
+    const githubUrl = getGithubAuthorizationUrl(state);
+
+    res.redirect(githubUrl);
+});
+
+router.post("/logout", (req, res) => {
+    res.clearCookie("token");
+
+    res.json({
+        message: "Logged out successfully"
+    });
+});
 
 export default router;

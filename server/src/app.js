@@ -4,6 +4,10 @@ import cors from "cors";
 import prisma from "./db/prisma.js";
 import authRoutes from "./routes/auth.routes.js";
 import cookieParser from "cookie-parser";
+import repositoryRoutes from "./routes/repository.routes.js";
+import repositoryFileRoutes from "./routes/repository-file.routes.js";
+import branchRoutes from "./routes/branch.routes.js";
+import fileContentRoutes from "./routes/file-content.routes.js";
 
 dotenv.config();
 
@@ -18,6 +22,10 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth", authRoutes)
+app.use("/api/repositories", repositoryRoutes);
+app.use("/api/repositories", repositoryFileRoutes);
+app.use("/api/repositories", branchRoutes);
+app.use("/api/repositories", fileContentRoutes);
 
 app.get("/api/health", async (req, res) => {
     try {

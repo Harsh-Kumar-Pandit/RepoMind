@@ -1,12 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -14,11 +7,264 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  githubId  String   @unique
-  username  String
-  avatarUrl String?
+// Preserved Phase 1 verification model
+model TestItem {
+  id        String   @id @default(uuid())
+  name      String
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
+
+enum IndexingStatus {
+  PENDING
+  INDEXING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum RepositoryRole {
+  OWNER
+  MEMBER
+}
+
+model Repository {
+  id            String             @id @default(uuid())
+  owner         String
+  name          String
+  url           String             @unique
+  defaultBranch String             @default("main")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  snapshots     RepoSnapshot[]
+  members       RepositoryMember[]
+  workspaces    Workspace[]
+  chatThreads   ChatThread[]
+
+  @@index([owner, name])
+}
+
+model RepoSnapshot {
+  id              String         @id @default(uuid())
+  repositoryId    String
+  repository      Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  branch          String
+  commitSha       String
+  configHash      String
+  embeddingModel  String         @default("gemini-embedding-001")
+  dimensions      Int            @default(768)
+  status          IndexingStatus @default(PENDING)
+  totalFiles      Int            @default(0)
+  indexedFiles    Int            @default(0)
+  totalChunks     Int            @default(0)
+  cachedChunks    Int            @default(0)
+  newChunks       Int            @default(0)
+  errorMessage    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  lockedBy        String?
+  lockExpiresAt   DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  files           FileRecord[]
+  snapshotChunks  SnapshotChunk[]
+  chatThreads     ChatThread[]
+
+  @@unique([repositoryId, commitSha, configHash])
+  @@index([repositoryId, branch])
+}
+
+model FileRecord {
+  id          String       @id @default(uuid())
+  snapshotId  String
+  snapshot    RepoSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  path        String
+  language    String
+  size        Int
+  contentHash String
+  createdAt   DateTime     @default(now())
+
+  @@unique([snapshotId, path])
+  @@index([snapshotId])
+}
+
+model CodeChunk {
+  id             String          @id @default(uuid())
+  contentHash    String
+  content        String
+  embeddingModel String
+  dimensions     Int             @default(768)
+  embedding      Unsupported("vector")?
+  createdAt      DateTime        @default(now())
+  snapshotChunks SnapshotChunk[]
+
+  @@unique([contentHash, embeddingModel, dimensions])
+}
+
+model SnapshotChunk {
+  id         String       @id @default(uuid())
+  snapshotId String
+  snapshot   RepoSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  chunkId    String
+  chunk      CodeChunk    @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  filePath   String
+  startLine  Int
+  endLine    Int
+  chunkIndex Int
+
+  @@unique([snapshotId, filePath, chunkIndex])
+  @@index([snapshotId, filePath])
+  @@index([chunkId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 Models — Authentication, Membership, Workspaces, and Chat History
+// ---------------------------------------------------------------------------
+
+model User {
+  id          String             @id @default(uuid())
+  githubId    String             @unique
+  login       String
+  name        String?
+  avatarUrl   String?
+  email       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  sessions    Session[]
+  memberships RepositoryMember[]
+  workspaces  Workspace[]
+  chatThreads ChatThread[]
+  checkpoints WorkspaceCheckpoint[]
+}
+
+model Session {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  userAgent  String?
+  ipHash     String?
+
+  @@index([userId, expiresAt])
+  @@index([tokenHash, revokedAt, expiresAt])
+}
+
+model RepositoryMember {
+  id           String         @id @default(uuid())
+  repositoryId String
+  repository   Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         RepositoryRole @default(OWNER)
+  createdAt    DateTime       @default(now())
+
+  @@unique([repositoryId, userId])
+  @@index([userId])
+}
+
+model Workspace {
+  id            String                @id @default(uuid())
+  repositoryId  String
+  repository    Repository            @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  baseCommitSha String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  files         WorkspaceFile[]
+  checkpoints   WorkspaceCheckpoint[]
+
+  @@unique([repositoryId, userId, name])
+  @@index([userId])
+}
+
+model WorkspaceFile {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  path        String
+  content     String
+  contentHash String
+  language    String?
+  isDeleted   Boolean   @default(false)
+  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, path])
+  @@index([workspaceId])
+}
+
+model WorkspaceCheckpoint {
+  id          String                    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime                  @default(now())
+  files       WorkspaceCheckpointFile[]
+
+  @@index([workspaceId, createdAt])
+  @@index([userId])
+}
+
+model WorkspaceCheckpointFile {
+  id           String              @id @default(uuid())
+  checkpointId String
+  checkpoint   WorkspaceCheckpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  path         String
+  content      String
+  contentHash  String
+  language     String?
+  isDeleted    Boolean             @default(false)
+  sizeBytes    Int
+
+  @@unique([checkpointId, path])
+  @@index([checkpointId])
+}
+
+model ChatThread {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshotId   String?
+  snapshot     RepoSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  title        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  messages     ChatMessage[]
+
+  @@index([userId, repositoryId])
+  @@index([snapshotId])
+}
+
+model ChatMessage {
+  id        String     @id @default(uuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role      String     // 'user' | 'assistant' | 'system'
+  content   String
+  citations Json?
+  provider  String?
+  model     String?
+  createdAt DateTime   @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model OAuthState {
+  nonce      String    @id
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+

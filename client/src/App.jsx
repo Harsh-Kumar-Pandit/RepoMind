@@ -1,134 +1,68 @@
-import { useState } from "react";
-import { analyzeRepository } from "./services/repository";
-import { readRepositoryFile } from "./services/files";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "./contexts/AuthContext.jsx";
+
+// Layouts
+import PublicLayout from "./layouts/PublicLayout.jsx";
+import AuthenticatedLayout from "./layouts/AuthenticatedLayout.jsx";
+
+// Core Pages
+import LandingPage from "./pages/LandingPage.jsx";
+import DesignSystemShowcase from "./pages/DesignSystemShowcase.jsx";
+import HomePage from "./pages/HomePage.jsx";
+import RepositoriesPage from "./pages/RepositoriesPage.jsx";
+import RepositoryOverviewPage from "./pages/RepositoryOverviewPage.jsx";
+import RepositoryExplorerPage from "./pages/RepositoryExplorerPage.jsx";
+import ChatPage from "./pages/ChatPage.jsx";
+
+// Workspaces, Pull Requests, History, Settings (Attempt 3 & 4)
+import WorkspacePage from "./pages/WorkspacePage.jsx";
+import PullRequestsPage from "./pages/PullRequestsPage.jsx";
+import HistoryPage from "./pages/HistoryPage.jsx";
+import SettingsPage from "./pages/SettingsPage.jsx";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 export default function App() {
-  const [url, setUrl] = useState("");
-  const [repository, setRepository] = useState(null);
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
-const [fileLoading, setFileLoading] = useState(false);
-const [fileError, setFileError] = useState("");
-
-  async function handleAnalyze(e) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setRepository(null);
-    setFiles([]);
-
-    try {
-      const data = await analyzeRepository(url);
-      setRepository(data.repository);
-      setFiles(data.tree ?? []);
-    } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          "Failed to analyze repository."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleFileClick(path, type) {
-  if (type !== "blob") return;
-
-  setFileLoading(true);
-  setFileError("");
-  setSelectedFile(null);
-
-  try {
-    const file = await readRepositoryFile(url, path);
-    setSelectedFile(file);
-  } catch (error) {
-    setFileError(
-      error.response?.data?.message ||
-        "Unable to load file."
-    );
-  } finally {
-    setFileLoading(false);
-  }
-}
-
   return (
-    <main className="min-h-screen bg-zinc-950 p-6 text-white md:p-12">
-      <div className="mx-auto max-w-5xl">
-        <h1 className="text-3xl font-bold">
-          RepoMind
-        </h1>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* Public Routes */}
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/design-system" element={<DesignSystemShowcase />} />
+            </Route>
 
-        <p className="mt-2 text-zinc-400">
-          Understand any GitHub repository with AI.
-        </p>
+            {/* Authenticated Application Shell */}
+            <Route path="/app" element={<AuthenticatedLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="repositories" element={<RepositoriesPage />} />
+              <Route path="repositories/:repositoryId" element={<RepositoryOverviewPage />} />
+              <Route path="explorer/:repositoryId" element={<RepositoryExplorerPage />} />
+              <Route path="chat" element={<ChatPage />} />
 
-        <form
-          onSubmit={handleAnalyze}
-          className="mt-8 flex flex-col gap-3 sm:flex-row"
-        >
-          <input
-            type="url"
-            required
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://github.com/facebook/react"
-            className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 outline-none focus:border-blue-500"
-          />
+              {/* Workspaces, Pull Requests, History, Settings */}
+              <Route path="workspaces" element={<WorkspacePage />} />
+              <Route path="workspaces/:workspaceId" element={<WorkspacePage />} />
+              <Route path="pull-requests" element={<PullRequestsPage />} />
+              <Route path="history" element={<HistoryPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-blue-600 px-6 py-3 font-medium hover:bg-blue-500 disabled:opacity-50"
-          >
-            {loading ? "Analyzing..." : "Analyze Repository"}
-          </button>
-        </form>
-
-        {error && (
-          <p className="mt-4 text-red-400">{error}</p>
-        )}
-
-        {repository && (
-          <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-            <h2 className="text-xl font-semibold">
-              {repository.fullName}
-            </h2>
-
-            <p className="mt-2 text-sm text-zinc-400">
-              {repository.description ||
-                "No description available"}
-            </p>
-
-            <p className="mt-3 text-sm text-zinc-400">
-              Default branch: {repository.defaultBranch}
-            </p>
-
-            <h3 className="mt-6 font-semibold">
-              Repository files ({files.length})
-            </h3>
-
-            <ul className="mt-3 space-y-2">
-              {files.slice(0, 100).map((file) => (
-                <li
-                  key={file.path}
-                  className="rounded-md bg-zinc-800 px-3 py-2 text-sm"
-                >
-                  {file.type === "tree" ? "📁" : "📄"}{" "}
-                  {file.path}
-                </li>
-              ))}
-            </ul>
-
-            {files.length > 100 && (
-              <p className="mt-3 text-sm text-zinc-400">
-                Showing the first 100 entries.
-              </p>
-            )}
-          </section>
-        )}
-      </div>
-    </main>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

@@ -1,24 +1,115 @@
+
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+**/node_modules/
+
+# ==========================================
+# Environment variables and secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ==========================================
+# Build outputs
+# ==========================================
+dist/
+build/
+out/
+coverage/
+.next/
+.vercel/
+.turbo/
+
+# ==========================================
 # Logs
-logs
+# ==========================================
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# ==========================================
+# OS files
+# ==========================================
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Editor directories and files
+# ==========================================
+# Editors and IDEs
+# ==========================================
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# ==========================================
+# Testing and coverage
+# ==========================================
+.nyc_output/
+playwright-report/
+test-results/
+
+# ==========================================
+# Temporary files and caches
+# ==========================================
+.tmp/
+temp/
+tmp/
+.cache/
+.parcel-cache/
+.eslintcache
+*.tsbuildinfo
+
+# ==========================================
+# Local databases and database files
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+
+# ==========================================
+# Prisma generated artifacts
+# ==========================================
+# Keep prisma/schema.prisma and migrations tracked.
+# Ignore generated client only if generated locally.
+**/src/generated/prisma/
+
+# ==========================================
+# Python artifacts (if used by AI services)
+# ==========================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# ==========================================
+# Docker and local data
+# ==========================================
+# Ignore local database volumes/data directories only.
+postgres-data/
+redis-data/
+docker-data/
+
+# ==========================================
+# Deployment and platform files
+# ==========================================
+.vercel/
+.netlify/
+
+# ==========================================
+# Local environment overrides
+# ==========================================
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
